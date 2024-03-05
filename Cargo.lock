@@ -21,6 +21,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -116,9 +122,9 @@ dependencies = [
 
 [[package]]
 name = "nusb"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5f8adce0565ec457ca66a47721a20c72d180be44f444b6cf9539c47b52c653e"
+checksum = "1ac267a828c32759883a6097809fc4c32d76925099725aae562717cb023b431c"
 dependencies = [
  "atomic-waker",
  "core-foundation",
@@ -153,6 +159,7 @@ checksum = "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
 name = "rust-usb"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
  "futures-lite",
  "nusb",
 ]
