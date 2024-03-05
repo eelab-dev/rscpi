@@ -1,14 +1,16 @@
+/* https://github.com/rogerioadris/rust-usbtmc/blob/main/src/instrument.rs
+*
+*/
+
 use byteorder::{ByteOrder, LittleEndian};
 use futures_lite::future::block_on;
-use nusb;
-//use nusb::transfer::{ControlOut, ControlType, Recipient, RequestBuffer};
+use nusb::{self, transfer::RequestBuffer};
 
 const USBTMC_MSGID_DEV_DEP_MSG_OUT: u8 = 1;
 const USBTMC_MSGID_DEV_DEP_MSG_IN: u8 = 2;
-const NUMBER_OF_HEADER_BYTES: usize = 12;
 
 fn pack_bulk_out_header(msgid: u8) -> Vec<u8> {
-    const last_btag: u8 = 0x00;
+    let last_btag: u8 = 0x00;
     let btag: u8 = (last_btag % 255) + 1;
     //last_btag = btag;
 
@@ -33,6 +35,25 @@ fn pack_dev_dep_msg_out_header(transfer_size: usize, eom: bool) -> Vec<u8> {
     hdr
 }
 
+fn pack_dev_dep_msg_in_header(transfer_size: usize, term_char: u8) -> Vec<u8> {
+    let mut hdr = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_IN);
+
+    hdr.append(&mut little_write_u32(transfer_size as u32, 4));
+    hdr.push(if term_char == 0 { 0x00 } else { 0x02 });
+    hdr.push(term_char);
+    hdr.append(&mut vec![0x00; 2]);
+
+    hdr
+}
+
+fn is_command(data: &[u8]) -> bool {
+    // Define the pattern you are looking for
+    let pattern = b"?\n";
+
+    // Use the ends_with method to check if the data ends with the pattern
+    data.ends_with(pattern)
+}
+
 fn main() {
     //let last_btag: u8 = 0x00;
 
@@ -55,7 +76,10 @@ fn main() {
 
     println!("Active configuration: {:#?}", config);
 
-    let data = b"*RST\n";
+    /* Here is the SCPI command should end with \n */
+    /**************************************************/
+    let data = b"*IDN?\n";
+    /**************************************************/
 
     let offset: usize = 0;
     let num: usize = data.len();
@@ -78,13 +102,34 @@ fn main() {
 
     println!("ok: {:?}", ok);
 
-    //let buffer = [0; 512];
-    /*let request_buffer = RequestBuffer::new(512);
-    let okr = block_on(interface.bulk_in(0x81, request_buffer))
-        .into_result()
-        .unwrap();
+    let command = is_command(data);
 
-    println!("okr: {:?}", okr);*/
+    if command {
+        println!("Command detected");
 
-    //println!("buffer: {:?}", String::from_utf8_lossy(&buffer));
+        let max_transfer_size: usize = 1024 * 1024;
+
+        let send = pack_dev_dep_msg_in_header(max_transfer_size, 0);
+        let ok2 = block_on(interface.bulk_out(0x02, send))
+            .into_result()
+            .unwrap();
+
+        println!("ok2: {:?}", ok2);
+
+        //let buffer = [0; 512];
+        let request_buffer = RequestBuffer::new(1024);
+        let okr = block_on(interface.bulk_in(0x81, request_buffer))
+            .into_result()
+            .unwrap();
+
+        println!("okr: {:?}", okr);
+
+        // Convert the numeric values to a String
+        let ascii_string: String = okr.iter().map(|&c| c as char).collect();
+
+        // Print the ASCII string to the terminal
+        println!("ASCII String: {}", ascii_string);
+    } else {
+        println!("No command detected. exiting.");
+    }
 }
