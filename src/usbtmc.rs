@@ -19,8 +19,8 @@ fn little_write_u32(size: u32, len: u8) -> Vec<u8> {
 /*
 * USBTMC document Table 1
 */
-fn pack_bulk_out_header(msgid: u8) -> Vec<u8> {
-    let last_btag: u8 = 0x00;
+fn pack_bulk_out_header(msgid: u8, last_btag: u8) -> Vec<u8> {
+    //let last_btag: u8 = 0x00;
     let btag: u8 = (last_btag % 255) + 1;
     //last_btag = btag;
 
@@ -32,7 +32,7 @@ fn pack_bulk_out_header(msgid: u8) -> Vec<u8> {
 * USBTMC document Table 3 and USB488 document Table 3
 */
 fn pack_dev_dep_msg_out_header(transfer_size: usize, eom: bool) -> Vec<u8> {
-    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_OUT);
+    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_OUT, 0x00);
 
     let mut total_transfer_size: Vec<u8> = little_write_u32(transfer_size as u32, 4);
     let bm_transfer_attributes: u8 = if eom { 0x01 } else { 0x00 };
@@ -49,8 +49,8 @@ fn pack_dev_dep_msg_out_header(transfer_size: usize, eom: bool) -> Vec<u8> {
 /*
 * USBTMC document Table 4
 */
-fn pack_dev_dep_msg_in_header(transfer_size: usize, term_char: u8) -> Vec<u8> {
-    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_IN);
+fn pack_dev_dep_msg_in_header(transfer_size: usize, term_char: u8, index: u8) -> Vec<u8> {
+    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_IN, index);
 
     let mut max_transfer_size: Vec<u8> = little_write_u32(transfer_size as u32, 4);
     let bm_transfer_attributes: u8 = if term_char == 0 { 0x00 } else { 0x02 };
@@ -71,6 +71,58 @@ fn is_query(data: &[u8]) -> bool {
     data.ends_with(pattern)
 }
 
+fn read_data(interface: &mut nusb::Interface, index: u8) -> (bool, usize) {
+    let max_transfer_size: usize = 1024 * 1024;
+
+    let send = pack_dev_dep_msg_in_header(max_transfer_size, 0, index);
+    let ok2 = block_on(interface.bulk_out(0x02, send))
+        .into_result()
+        .unwrap();
+
+    println!("ok2->: {:?}", ok2);
+
+    //let buffer = [0; 512];
+    let request_buffer = RequestBuffer::new(20000);
+    let okr = block_on(interface.bulk_in(0x81, request_buffer))
+        .into_result()
+        .unwrap();
+
+    println!("okr<-: {:?}", okr);
+    println!("PAYLOAD");
+
+    let usb_packet_size = okr.len();
+    println!("usb packet size: {}", usb_packet_size);
+
+    let term_recv: bool = okr[okr.len() - 1] == 0x0A; //=10
+    println!("term_recv: {}", term_recv);
+
+    // Convert the numeric values to a String
+    //let ascii_string: String = okr.iter().map(|&c| c as char).collect();
+
+    // Separate the bytes
+    let (header, payload): (&[u8], &[u8]) = okr.split_at(12);
+
+    // Convert the first part to hexadecimal values and print
+    print!("Hex values: ");
+    for byte in header {
+        print!("{:02x} ", byte);
+    }
+    println!();
+
+    let payload_size = LittleEndian::read_u32(&header[4..8]) as usize;
+    println!("Payload size in header: {}", payload_size);
+
+    let eom: bool = header[8] == 0x01;
+    println!("EOM: {}", eom);
+
+    // Convert the second part to ASCII and print
+    //print!("ASCII values: ");
+    //let ascii_string = String::from_utf8(payload.to_vec()).unwrap();
+    //println!("{}", ascii_string);
+
+    (eom, usb_packet_size)
+}
+
 pub fn send_command(interface: &mut nusb::Interface, command: &str) {
     let command_with_newline = command.to_owned() + "\n";
     let data = command_with_newline.as_bytes();
@@ -88,61 +140,25 @@ pub fn send_command(interface: &mut nusb::Interface, command: &str) {
     req.append(&mut b);
     req.append(&mut vec![0x00; (4 - (size % 4)) % 4]);
 
-    println!("Sending command");
+    println!("Sending command: {:?}", command);
 
-    let ok = block_on(interface.bulk_out(0x02, req))
+    let ok: nusb::transfer::ResponseBuffer = block_on(interface.bulk_out(0x02, req))
         .into_result()
         .unwrap();
 
-    println!("ok: {:?}", ok);
+    println!("ok->: {:?}", ok);
 
     let query = is_query(data);
 
     if query {
-        println!("Command detected");
+        println!("query detected");
+        let (mut eom, packet_size) = read_data(interface, 0x00);
 
-        let max_transfer_size: usize = 1024 * 1024;
-
-        let send = pack_dev_dep_msg_in_header(max_transfer_size, 0);
-        let ok2 = block_on(interface.bulk_out(0x02, send))
-            .into_result()
-            .unwrap();
-
-        println!("ok2: {:?}", ok2);
-
-        //let buffer = [0; 512];
-        let request_buffer = RequestBuffer::new(1024);
-        let okr = block_on(interface.bulk_in(0x81, request_buffer))
-            .into_result()
-            .unwrap();
-
-        println!("okr: {:?}", okr);
-        println!();
-
-        // Convert the numeric values to a String
-        //let ascii_string: String = okr.iter().map(|&c| c as char).collect();
-
-        // Separate the bytes
-        let (header, payload) = okr.split_at(12);
-
-        // Convert the first part to hexadecimal values and print
-        print!("Hex values: ");
-        for byte in header {
-            print!("{:02x} ", byte);
+        while !eom {
+            (eom, _) = read_data(interface, 0x00);
         }
-        println!(); // Add a new line for clarity
-
-        let payload_size = LittleEndian::read_u32(&header[4..8]) as usize;
-        println!("Payload size: {}", payload_size);
-
-        let eom = (header[8] & 0x01) != 0;
-        println!("EOM: {}", eom);
-
-        // Convert the second part to ASCII and print
-        print!("ASCII values: ");
-        let ascii_string = String::from_utf8(payload.to_vec()).unwrap();
-        println!("{}", ascii_string);
     } else {
         println!("No command detected. exiting.");
     }
+    println!("");
 }

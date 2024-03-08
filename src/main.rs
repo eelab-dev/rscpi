@@ -26,4 +26,12 @@ fn main() {
     usbtmc::send_command(&mut interface, "*IDN?");
 
     usbtmc::send_command(&mut interface, ":CHANnel1:SCALe?");
+
+    usbtmc::send_command(&mut interface, ":DIGitize CHANnel1");
+
+    usbtmc::send_command(&mut interface, ":WAVeform:FORMat BYTE");
+
+    usbtmc::send_command(&mut interface, ":WAVeform:POINts 1000");
+
+    usbtmc::send_command(&mut interface, ":WAVeform:DATA?");
 }
