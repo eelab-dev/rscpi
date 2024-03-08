@@ -168,7 +168,7 @@ fn read_data(
     eom
 }
 
-pub fn send_command(interface: &mut nusb::Interface, command: &str) {
+pub fn send_command(interface: &mut nusb::Interface, command: &str) -> Vec<u8> {
     let command_with_newline = command.to_owned() + "\n";
     let data = command_with_newline.as_bytes();
 
@@ -222,4 +222,6 @@ pub fn send_command(interface: &mut nusb::Interface, command: &str) {
         println!("No command detected. exiting.");
     }
     println!("");
+
+    big_big_buffer
 }

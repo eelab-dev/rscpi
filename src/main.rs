@@ -1,4 +1,5 @@
 use nusb;
+mod io;
 mod usbtmc;
 
 fn main() {
@@ -38,4 +39,12 @@ fn main() {
     usbtmc::send_command(&mut interface, ":WAVeform:POINts 2675");
 
     usbtmc::send_command(&mut interface, ":WAVeform:DATA?");
+
+    let data = usbtmc::send_command(&mut interface, ":DISP:DATA? BMP, COL");
+
+    let data = usbtmc::send_command(&mut interface, ":DISP:DATA? PNG, COL");
+
+    let sliced_data = &data[10..data.len() - 1];
+
+    io::write_to_file(sliced_data).expect("failed to write to file");
 }
