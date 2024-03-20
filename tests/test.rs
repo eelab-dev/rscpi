@@ -29,26 +29,26 @@ fn main() {
         recv_buffer_size: 1024,
     };
 
-    let idn = send_command(&mut usbtmc, "*IDN?").unwrap();
+    let idn = query(&mut usbtmc, "*IDN?").unwrap();
     print!("{}", idn);
 
-    let _ = send_command(&mut usbtmc, ":CHANnel1:SCALe?").unwrap();
+    println!("{}", query(&mut usbtmc, ":CHANnel1:SCALe?").unwrap());
 
-    let _ = send_command(&mut usbtmc, ":TIMebase:MODE MAIN").unwrap();
+    write(&mut usbtmc, ":TIMebase:MODE MAIN").unwrap();
 
-    let _ = send_command(&mut usbtmc, ":WAVeform:POINts:MODE RAW").unwrap();
+    write(&mut usbtmc, ":WAVeform:POINts:MODE RAW").unwrap();
 
-    let _ = send_command(&mut usbtmc, ":DIGitize CHANnel1").unwrap();
+    write(&mut usbtmc, ":DIGitize CHANnel1").unwrap();
 
-    let _ = send_command(&mut usbtmc, ":WAVeform:FORMat BYTE").unwrap();
+    write(&mut usbtmc, ":WAVeform:FORMat BYTE").unwrap();
 
-    let _ = send_command(&mut usbtmc, ":WAVeform:POINts 2675").unwrap();
+    write(&mut usbtmc, ":WAVeform:POINts 10151").unwrap();
 
-    let _ = send_command(&mut usbtmc, ":WAVeform:DATA?");
+    let data = query_raw(&mut usbtmc, ":WAVeform:DATA?").unwrap();
 
-    let _data = send_command(&mut usbtmc, ":DISP:DATA? BMP, COL").unwrap();
+    //let _data = send_command(&mut usbtmc, ":DISP:DATA? BMP, COL").unwrap();
 
-    let data = send_command_raw(&mut usbtmc, ":DISP:DATA? PNG, COL").unwrap();
+    //let data = send_command_raw(&mut usbtmc, ":DISP:DATA? PNG, COL").unwrap();
 
     let sliced_data = &data[10..data.len() - 1];
 
