@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # read binary file
-data = np.fromfile('../output/output.png', dtype=np.uint8)
+data = np.fromfile('../output/data.bin', dtype=np.uint8)
 
 print(data.shape)
 

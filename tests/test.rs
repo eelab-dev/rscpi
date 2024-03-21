@@ -1,33 +1,47 @@
 mod io;
 use rscpi::*;
 
-#[test]
-fn main() {
-    //let last_btag: u8 = 0x00;
+const VID_PID: &str = "2A8D:0397";
+const BUFF_SIZE: usize = 1024;
 
+#[test]
+fn info() {
+    let device_all = nusb::list_devices().unwrap();
+    println!("{:#?}", device_all.collect::<Vec<_>>()); // Collect the iterator into a Vec and print it with pretty formatting
+}
+
+#[test]
+fn config() {
+    let usbtmc = open_device(VID_PID, 1024).unwrap();
+
+    let device = &usbtmc.device;
+
+    let config: nusb::descriptors::Configuration<'_> = device.active_configuration().unwrap();
+
+    println!("Active configuration: {:#?}", config);
+}
+
+#[test]
+fn screenshot() {
+    let mut usbtmc = open_device(VID_PID, BUFF_SIZE).unwrap();
+
+    let idn = query(&mut usbtmc, "*IDN?").unwrap();
+    print!("{}", idn);
+
+    let data_raw = query_raw(&mut usbtmc, ":DISP:DATA? PNG").unwrap();
+
+    let data = get_data_from_raw(&data_raw).unwrap();
+
+    io::write_to_file(data, "./output/output.png").expect("failed to write to file");
+}
+
+#[test]
+fn capture() {
     let message: String = String::from("Hello fellow Rustaceans!");
 
     println!("{}", message);
 
-    //let device_all = nusb::list_devices().unwrap();
-    //println!("{:#?}", device_all.collect::<Vec<_>>()); // Collect the iterator into a Vec and print it with pretty formatting
-
-    let device_info: nusb::DeviceInfo = nusb::list_devices()
-        .unwrap()
-        .find(|dev| dev.vendor_id() == 0x2A8D && dev.product_id() == 0x0397)
-        .expect("device not connected");
-
-    let device: nusb::Device = device_info.open().expect("failed to open device");
-    let interface: nusb::Interface = device.detach_and_claim_interface(0).unwrap();
-
-    //let config: nusb::descriptors::Configuration<'_> = device.active_configuration().unwrap();
-
-    //println!("Active configuration: {:#?}", config);
-
-    let mut usbtmc = Usbtmc {
-        interface,
-        recv_buffer_size: 1024,
-    };
+    let mut usbtmc = open_device(VID_PID, BUFF_SIZE).unwrap();
 
     let idn = query(&mut usbtmc, "*IDN?").unwrap();
     print!("{}", idn);
@@ -42,15 +56,11 @@ fn main() {
 
     write(&mut usbtmc, ":WAVeform:FORMat BYTE").unwrap();
 
-    write(&mut usbtmc, ":WAVeform:POINts 10151").unwrap();
+    //write(&mut usbtmc, ":WAVeform:POINts 10151").unwrap();
 
-    let data = query_raw(&mut usbtmc, ":WAVeform:DATA?").unwrap();
+    let data_raw = query_raw(&mut usbtmc, ":WAVeform:DATA?").unwrap();
 
-    //let _data = send_command(&mut usbtmc, ":DISP:DATA? BMP, COL").unwrap();
+    let data = get_data_from_raw(&data_raw).unwrap();
 
-    //let data = send_command_raw(&mut usbtmc, ":DISP:DATA? PNG, COL").unwrap();
-
-    let sliced_data = &data[10..data.len() - 1];
-
-    io::write_to_file(sliced_data, "./output/output.png").expect("failed to write to file");
+    io::write_to_file(data, "./output/data.bin").expect("failed to write to file");
 }

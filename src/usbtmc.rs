@@ -13,6 +13,7 @@ pub enum UsbtmcErrors {
     BulkOutTransferError,
     BulkInTransferError,
     BadBufferSize,
+    InvalidData,
 }
 
 macro_rules! log {
@@ -233,12 +234,20 @@ pub(crate) fn send_command_raw(
         let term_recv: bool = big_big_buffer[big_big_buffer.len() - 1] == 0x0A; //=10
         log!("term_recv: {}\n", term_recv);
 
+        if !term_recv {
+            log!("term_recv is false. Reading more data.\n");
+            return Err(UsbtmcErrors::InvalidData);
+        }
+
+        #[cfg(debug_assertions)]
         if big_big_buffer.len() > 100 {
             log!("The first 10 bytes of the payload:\n");
             let ten_bytes = &big_big_buffer[0..10];
             let ascii_string: String = ten_bytes.iter().map(|&b| b as char).collect();
             log!("{}\n", ascii_string);
         }
+
+        big_big_buffer.truncate(big_big_buffer.len() - 1);
     } else {
         log!("No command detected. exiting.\n");
     }
