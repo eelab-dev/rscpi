@@ -8,6 +8,9 @@ use futures_lite::future::block_on;
 use nusb::transfer::RequestBuffer;
 use nusb::transfer::TransferError;
 
+const ENDPOINT_IN: u8 = 0x81;
+const ENDPOINT_OUT: u8 = 0x02;
+
 #[derive(Debug)]
 pub enum UsbtmcErrors {
     BulkOutTransferError,
@@ -118,7 +121,7 @@ fn read_data_transfer(
     big_buffer: &mut Vec<u8>,
 ) -> Result<usize, UsbtmcErrors> {
     let request_buffer = RequestBuffer::new(buffer_size);
-    let okr_result = block_on(interface.bulk_in(0x81, request_buffer)).into_result();
+    let okr_result = block_on(interface.bulk_in(ENDPOINT_IN, request_buffer)).into_result();
 
     let okr = okr_result.map_err(|_| UsbtmcErrors::BulkInTransferError)?;
 
@@ -150,7 +153,7 @@ fn read_data(
     };
 
     let send = pack_dev_dep_msg_in_header(max_transfer_size, 0);
-    let ok2_results = block_on(interface.bulk_out(0x02, send)).into_result();
+    let ok2_results = block_on(interface.bulk_out(ENDPOINT_OUT, send)).into_result();
 
     let ok2 = ok2_results.map_err(|_| UsbtmcErrors::BulkOutTransferError)?;
 
@@ -209,7 +212,7 @@ pub(crate) fn send_command_raw(
     log!("Sending command: {:?}\n", command);
 
     let ok_results: Result<nusb::transfer::ResponseBuffer, TransferError> =
-        block_on(interface.bulk_out(0x02, req)).into_result();
+        block_on(interface.bulk_out(ENDPOINT_OUT, req)).into_result();
 
     let ok = ok_results.map_err(|_| UsbtmcErrors::BulkOutTransferError)?;
 
