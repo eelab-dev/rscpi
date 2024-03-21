@@ -1,8 +1,10 @@
 mod io;
+use std::time::Instant;
+
 use rscpi::*;
 
 const VID_PID: &str = "2A8D:0397";
-const BUFF_SIZE: usize = 1024;
+const BUFF_SIZE: usize = 1024 * 1024;
 
 #[test]
 fn info() {
@@ -28,11 +30,8 @@ fn screenshot() {
     let idn = query(&mut usbtmc, "*IDN?").unwrap();
     print!("{}", idn);
 
-    let data_raw = query_raw(&mut usbtmc, ":DISP:DATA? PNG").unwrap();
-
-    let data = get_data_from_raw(&data_raw).unwrap();
-
-    io::write_to_file(data, "./output/output.png").expect("failed to write to file");
+    let data = query_binary_data(&mut usbtmc, ":DISP:DATA? PNG").unwrap();
+    io::write_to_file(&data, "./output/output.png").expect("failed to write to file");
 }
 
 #[test]
@@ -58,7 +57,11 @@ fn capture() {
 
     //write(&mut usbtmc, ":WAVeform:POINts 10151").unwrap();
 
+    let start = Instant::now();
+
     let data_raw = query_raw(&mut usbtmc, ":WAVeform:DATA?").unwrap();
+
+    println!("Capture duration: {:?}", start.elapsed());
 
     let data = get_data_from_raw(&data_raw).unwrap();
 

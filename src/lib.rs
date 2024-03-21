@@ -62,3 +62,11 @@ pub fn get_data_from_raw(raw_data: &[u8]) -> Result<&[u8], UsbtmcErrors> {
         Err(UsbtmcErrors::InvalidData)
     }
 }
+
+pub fn query_binary_data(usbtmc: &mut Usbtmc, command: &str) -> Result<Vec<u8>, UsbtmcErrors> {
+    let data_raw = query_raw(usbtmc, command)?;
+
+    let data = get_data_from_raw(&data_raw)?;
+
+    Ok(data.to_vec())
+}
