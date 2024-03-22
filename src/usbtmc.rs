@@ -166,6 +166,7 @@ fn read_data(
 
     // Convert the first part to hexadecimal values and print
     log!("Header Hex values: ");
+    #[cfg(debug_assertions)]
     for byte in header {
         log!("{:02x} ", byte);
     }

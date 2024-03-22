@@ -1,5 +1,8 @@
 [package]
 name = "rscpi"
+description = "Rust library for USBTMC"
+homepage = "https://github.com/danchitnis/rscpi"
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
 
