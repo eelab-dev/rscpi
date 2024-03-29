@@ -62,6 +62,17 @@ fn screenshot() {
     io::write_to_file(&data, "./output/screenshot.png").expect("failed to write to file");
 }
 
+fn check_scpi_error(usbtmc: &mut Usbtmc) {
+    let error = query(usbtmc, ":SYSTem:ERRor?").unwrap();
+
+    let error_code = error.split(',').nth(0).unwrap().parse::<i32>().unwrap();
+
+    if error_code != 0 {
+        let error_message = error.split(',').nth(1).unwrap();
+        panic!("SCPI error: {} - {}", error_code, error_message);
+    }
+}
+
 #[test]
 fn capture() {
     let message: String = String::from("Hello fellow Rustaceans!");
@@ -71,19 +82,20 @@ fn capture() {
     let mut usbtmc = open_device(VID_PID).unwrap();
 
     let idn = query(&mut usbtmc, "*IDN?").unwrap();
-    print!("{}", idn);
+    println!("{}", idn);
 
-    println!("{}", query(&mut usbtmc, ":CHANnel1:SCALe?").unwrap());
-
-    write(&mut usbtmc, ":TIMebase:MODE MAIN").unwrap();
+    write(&mut usbtmc, "*CLS").unwrap();
 
     write(&mut usbtmc, ":WAVeform:POINts:MODE RAW").unwrap();
+    check_scpi_error(&mut usbtmc);
 
-    write(&mut usbtmc, ":DIGitize CHANnel1").unwrap();
+    write(&mut usbtmc, ":DIGitize CHANnel1, CHANnel2").unwrap();
 
     write(&mut usbtmc, ":WAVeform:FORMat BYTE").unwrap();
+    check_scpi_error(&mut usbtmc);
 
-    //write(&mut usbtmc, ":WAVeform:POINts 10151").unwrap();
+    write(&mut usbtmc, ":WAVeform:SOURce CHAN1").unwrap();
+    check_scpi_error(&mut usbtmc);
 
     let start = Instant::now();
 
