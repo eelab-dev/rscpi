@@ -2,10 +2,17 @@ mod usbtmc;
 use crate::usbtmc::*;
 use usbtmc::UsbtmcErrors;
 
+use nusb::descriptors::InterfaceAltSetting;
+use nusb::transfer::Direction;
+
 pub struct Usbtmc {
     pub device: nusb::Device,
     pub interface: nusb::Interface,
-    pub recv_buffer_size: usize,
+    endpoint_in_addr: u8,
+    endpoint_out_addr: u8,
+    endpoint_in_max_packet_size: usize,
+    #[allow(dead_code)]
+    endpoint_out_max_packet_size: usize,
 }
 
 pub fn query(usbtmc: &mut Usbtmc, command: &str) -> Result<String, UsbtmcErrors> {
@@ -22,7 +29,7 @@ pub fn write(usbtmc: &mut Usbtmc, command: &str) -> Result<(), UsbtmcErrors> {
     Ok(())
 }
 
-pub fn open_device(vid_pid: &str, buff_size: usize) -> Result<Usbtmc, UsbtmcErrors> {
+pub fn open_device(vid_pid: &str) -> Result<Usbtmc, UsbtmcErrors> {
     let vid = u16::from_str_radix(&vid_pid[0..4], 16).unwrap();
     let pid = u16::from_str_radix(&vid_pid[5..9], 16).unwrap();
 
@@ -32,12 +39,41 @@ pub fn open_device(vid_pid: &str, buff_size: usize) -> Result<Usbtmc, UsbtmcErro
         .expect("device not connected");
 
     let device: nusb::Device = device_info.open().expect("failed to open device");
-    let interface: nusb::Interface = device.detach_and_claim_interface(0).unwrap();
+    let interface: nusb::Interface = device
+        .detach_and_claim_interface(0)
+        .expect("failed to claim interface");
+
+    let config: nusb::descriptors::Configuration<'_> = device
+        .active_configuration()
+        .expect("failed to get active configuration");
+
+    let inetrface_alt_settings: Vec<InterfaceAltSetting> =
+        config.interface_alt_settings().collect();
+
+    let endpoint_in = inetrface_alt_settings[0]
+        .endpoints()
+        .find(|ep| ep.direction() == Direction::In)
+        .expect("failed to find endpoint_in");
+
+    let address_in = endpoint_in.address();
+
+    let endpoint_out = inetrface_alt_settings[0]
+        .endpoints()
+        .find(|ep| ep.direction() == Direction::Out)
+        .expect("failed to find endpoint_out");
+
+    let address_out = endpoint_out.address();
+
+    let endpoint_in_max_packet_size = endpoint_in.max_packet_size();
+    let endpoint_out_max_packet_size = endpoint_out.max_packet_size();
 
     Ok(Usbtmc {
         device,
         interface,
-        recv_buffer_size: buff_size,
+        endpoint_in_addr: address_in,
+        endpoint_out_addr: address_out,
+        endpoint_in_max_packet_size,
+        endpoint_out_max_packet_size,
     })
 }
 

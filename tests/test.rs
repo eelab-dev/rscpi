@@ -1,10 +1,11 @@
 mod io;
 use std::time::Instant;
 
+use nusb::descriptors::InterfaceAltSetting;
+use nusb::transfer::Direction;
 use rscpi::*;
 
 const VID_PID: &str = "2A8D:0397";
-const BUFF_SIZE: usize = 1024 * 1024;
 
 #[test]
 fn info() {
@@ -14,24 +15,51 @@ fn info() {
 
 #[test]
 fn config() {
-    let usbtmc = open_device(VID_PID, 1024).unwrap();
+    let usbtmc = open_device(VID_PID).unwrap();
 
     let device = &usbtmc.device;
 
     let config: nusb::descriptors::Configuration<'_> = device.active_configuration().unwrap();
 
     println!("Active configuration: {:#?}", config);
+
+    let inetrface_alt_settings: Vec<InterfaceAltSetting> =
+        config.interface_alt_settings().collect();
+
+    // find the address of endpoint which matches Bulk IN
+    let endpoint_in = inetrface_alt_settings[0]
+        .endpoints()
+        .find(|ep| ep.direction() == Direction::In)
+        .unwrap();
+
+    // find the property address of endpoint_in
+    let address_in = endpoint_in.address();
+
+    // print the address in hex
+    println!("Endpoint in Address is: 0x{:x}", address_in);
+
+    // find the address of endpoint which matches Bulk OUT
+    let endpoint_out = inetrface_alt_settings[0]
+        .endpoints()
+        .find(|ep| ep.direction() == Direction::Out)
+        .unwrap();
+
+    // find the property address of endpoint_out
+    let address_out = endpoint_out.address();
+
+    // print the address in hex
+    println!("Endpoint out Address is: 0x{:x}", address_out);
 }
 
 #[test]
 fn screenshot() {
-    let mut usbtmc = open_device(VID_PID, BUFF_SIZE).unwrap();
+    let mut usbtmc = open_device(VID_PID).unwrap();
 
     let idn = query(&mut usbtmc, "*IDN?").unwrap();
     print!("{}", idn);
 
     let data = query_binary_data(&mut usbtmc, ":DISP:DATA? PNG").unwrap();
-    io::write_to_file(&data, "./output/output.png").expect("failed to write to file");
+    io::write_to_file(&data, "./output/screenshot.png").expect("failed to write to file");
 }
 
 #[test]
@@ -40,7 +68,7 @@ fn capture() {
 
     println!("{}", message);
 
-    let mut usbtmc = open_device(VID_PID, BUFF_SIZE).unwrap();
+    let mut usbtmc = open_device(VID_PID).unwrap();
 
     let idn = query(&mut usbtmc, "*IDN?").unwrap();
     print!("{}", idn);

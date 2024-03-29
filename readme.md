@@ -5,5 +5,5 @@ A pure rust implementation of USBTMC for scpi communication with test and measur
 ## Test Debug
     
     ```bash
-    cargo test --release -- --nocapture
+    cargo test -r -- --nocapture --test screenshot
     ```

@@ -8,14 +8,13 @@ use futures_lite::future::block_on;
 use nusb::transfer::RequestBuffer;
 use nusb::transfer::TransferError;
 
-const ENDPOINT_IN: u8 = 0x81;
-const ENDPOINT_OUT: u8 = 0x02;
+const USBTMC_MSGID_DEV_DEP_MSG_OUT: u8 = 1;
+const USBTMC_MSGID_DEV_DEP_MSG_IN: u8 = 2;
 
 #[derive(Debug)]
 pub enum UsbtmcErrors {
     BulkOutTransferError,
     BulkInTransferError,
-    BadBufferSize,
     InvalidData,
 }
 
@@ -49,9 +48,6 @@ fn print_array_partial(bytes: Vec<u8>) {
         println!("]");
     }
 }
-
-const USBTMC_MSGID_DEV_DEP_MSG_OUT: u8 = 1;
-const USBTMC_MSGID_DEV_DEP_MSG_IN: u8 = 2;
 
 fn little_write_u32(size: u32, len: u8) -> Vec<u8> {
     let mut buf = vec![0; len as usize];
@@ -116,12 +112,17 @@ fn is_query(data: &[u8]) -> bool {
 }
 
 fn read_data_transfer(
-    interface: &mut nusb::Interface,
-    buffer_size: usize,
+    usbtmc: &mut Usbtmc,
     big_buffer: &mut Vec<u8>,
 ) -> Result<usize, UsbtmcErrors> {
-    let request_buffer = RequestBuffer::new(buffer_size);
-    let okr_result = block_on(interface.bulk_in(ENDPOINT_IN, request_buffer)).into_result();
+    let recv_buffer_size = usbtmc.endpoint_in_max_packet_size * 1024;
+    let request_buffer = RequestBuffer::new(recv_buffer_size);
+    let okr_result = block_on(
+        usbtmc
+            .interface
+            .bulk_in(usbtmc.endpoint_in_addr, request_buffer),
+    )
+    .into_result();
 
     let okr = okr_result.map_err(|_| UsbtmcErrors::BulkInTransferError)?;
 
@@ -138,28 +139,21 @@ fn read_data_transfer(
     Ok(usb_packet_size)
 }
 
-fn read_data(
-    interface: &mut nusb::Interface,
-    big_big_buffer: &mut Vec<u8>,
-    req_buffer_size: usize,
-) -> Result<bool, UsbtmcErrors> {
-    let max_transfer_size: usize = 1024 * 1024;
+fn read_data(usbtmc: &mut Usbtmc, big_big_buffer: &mut Vec<u8>) -> Result<bool, UsbtmcErrors> {
+    let max_transfer_size: usize = 1024 * usbtmc.endpoint_in_max_packet_size;
     let mut big_buffer: Vec<u8> = Vec::new();
 
-    let buffer_size = if req_buffer_size > max_transfer_size || req_buffer_size == 0 {
-        return Err(UsbtmcErrors::BadBufferSize);
-    } else {
-        req_buffer_size
-    };
+    let buffer_size = max_transfer_size;
 
     let send = pack_dev_dep_msg_in_header(max_transfer_size, 0);
-    let ok2_results = block_on(interface.bulk_out(ENDPOINT_OUT, send)).into_result();
+    let ok2_results =
+        block_on(usbtmc.interface.bulk_out(usbtmc.endpoint_out_addr, send)).into_result();
 
     let ok2 = ok2_results.map_err(|_| UsbtmcErrors::BulkOutTransferError)?;
 
     log!("ok2->: {:?}\n", ok2);
 
-    let mut usb_packet_recv_size = read_data_transfer(interface, buffer_size, &mut big_buffer)?;
+    let mut usb_packet_recv_size = read_data_transfer(usbtmc, &mut big_buffer)?;
 
     // Separate the bytes
     let (header, _): (&[u8], &[u8]) = big_buffer.split_at(12);
@@ -180,7 +174,7 @@ fn read_data(
 
     while usb_packet_recv_size == buffer_size {
         log!("Packet size equals buffer size. Reading more data.\n");
-        usb_packet_recv_size = read_data_transfer(interface, buffer_size, &mut big_buffer)?;
+        usb_packet_recv_size = read_data_transfer(usbtmc, &mut big_buffer)?;
     }
 
     big_big_buffer.extend_from_slice(&big_buffer[12..]);
@@ -213,7 +207,7 @@ pub(crate) fn send_command_raw(
     log!("Sending command: {:?}\n", command);
 
     let ok_results: Result<nusb::transfer::ResponseBuffer, TransferError> =
-        block_on(interface.bulk_out(ENDPOINT_OUT, req)).into_result();
+        block_on(interface.bulk_out(usbtmc.endpoint_out_addr, req)).into_result();
 
     let ok = ok_results.map_err(|_| UsbtmcErrors::BulkOutTransferError)?;
 
@@ -225,11 +219,11 @@ pub(crate) fn send_command_raw(
 
     if query {
         log!("query detected\n");
-        let mut eom: bool = read_data(interface, &mut big_big_buffer, usbtmc.recv_buffer_size)?;
+        let mut eom: bool = read_data(usbtmc, &mut big_big_buffer)?;
 
         while !eom {
             log!("eom is false. Reading more data.\n");
-            eom = read_data(interface, &mut big_big_buffer, usbtmc.recv_buffer_size)?;
+            eom = read_data(usbtmc, &mut big_big_buffer)?;
         }
         log!(
             "transfer complete. total payload size: {}\n",
