@@ -65,11 +65,20 @@ fn screenshot() {
 fn check_scpi_error(usbtmc: &mut Usbtmc) {
     let error = query(usbtmc, ":SYSTem:ERRor?").unwrap();
 
-    let error_code = error.split(',').nth(0).unwrap().parse::<i32>().unwrap();
+    // check if the error string contains a comma
+    if error.contains(',') {
+        let error_code = error.split(',').nth(0).unwrap().parse::<i32>().unwrap();
 
-    if error_code != 0 {
-        let error_message = error.split(',').nth(1).unwrap();
-        panic!("SCPI error: {} - {}", error_code, error_message);
+        if error_code != 0 {
+            let error_message = error.split(',').nth(1).unwrap();
+            println!("SCPI error: {} - {}", error_code, error_message);
+        }
+    } else {
+        let error_code = error.parse::<i32>().unwrap();
+
+        if error_code != 0 {
+            println!("SCPI error: {}", error_code);
+        }
     }
 }
 
