@@ -5,7 +5,7 @@ use nusb::descriptors::InterfaceAltSetting;
 use nusb::transfer::Direction;
 use rscpi::*;
 
-const VID_PID: &str = "2A8D:0397";
+const VID_PID: &str = "2A8D:9007";
 
 #[test]
 fn info() {
@@ -95,15 +95,23 @@ fn capture() {
 
     write(&mut usbtmc, "*CLS").unwrap();
 
-    write(&mut usbtmc, ":WAVeform:POINts:MODE RAW").unwrap();
+    write(&mut usbtmc, "ACQuire:POINts:ANALog 200e6").unwrap();
     check_scpi_error(&mut usbtmc);
 
-    write(&mut usbtmc, ":DIGitize CHANnel1, CHANnel2").unwrap();
+    //write(&mut usbtmc, ":WAVeform:TYPE RAW").unwrap();
+    //check_scpi_error(&mut usbtmc);
+
+    write(&mut usbtmc, ":CHANnel1:DISPlay ON").unwrap();
+
+    write(&mut usbtmc, ":DIGitize").unwrap();
+
+    write(&mut usbtmc, ":WAVeform:SOURce CHAN1").unwrap();
+    check_scpi_error(&mut usbtmc);
 
     write(&mut usbtmc, ":WAVeform:FORMat BYTE").unwrap();
     check_scpi_error(&mut usbtmc);
 
-    write(&mut usbtmc, ":WAVeform:SOURce CHAN1").unwrap();
+    write(&mut usbtmc, ":WAVeform:STReaming ON").unwrap();
     check_scpi_error(&mut usbtmc);
 
     let start = Instant::now();

@@ -84,11 +84,13 @@ pub fn get_data_from_raw(raw_data: &[u8]) -> Result<&[u8], UsbtmcErrors> {
             .parse::<usize>()
             .unwrap();
 
-        let data_size_ascii = String::from_utf8(raw_data[2..(2 + num_bytes)].to_vec()).unwrap();
-        let data_size = data_size_ascii.parse::<usize>().unwrap();
+        if num_bytes > 0 {
+            let data_size_ascii = String::from_utf8(raw_data[2..(2 + num_bytes)].to_vec()).unwrap();
+            let data_size = data_size_ascii.parse::<usize>().unwrap();
 
-        if data_size != raw_data.len() - (2 + num_bytes) {
-            return Err(UsbtmcErrors::InvalidData);
+            if data_size != raw_data.len() - (2 + num_bytes) {
+                return Err(UsbtmcErrors::InvalidData);
+            }
         }
 
         let data = &raw_data[(2 + num_bytes)..];
