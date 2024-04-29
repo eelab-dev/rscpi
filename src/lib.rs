@@ -1,9 +1,10 @@
-mod usbtmc;
+pub mod usbtmc;
 use crate::usbtmc::*;
 use usbtmc::UsbtmcErrors;
 
 use nusb::descriptors::InterfaceAltSetting;
 use nusb::transfer::Direction;
+use nusb::transfer::EndpointType;
 
 pub struct Usbtmc {
     pub device: nusb::Device,
@@ -13,6 +14,16 @@ pub struct Usbtmc {
     endpoint_in_max_packet_size: usize,
     #[allow(dead_code)]
     endpoint_out_max_packet_size: usize,
+}
+
+macro_rules! log {
+    // The `$(...)*` syntax is used to match against any number of arguments of any type
+    ($($arg:tt)*) => {
+        // Check if in debug mode and call `print!` if true
+        if cfg!(debug_assertions) {
+            print!($($arg)*);
+        }
+    };
 }
 
 pub fn query(usbtmc: &mut Usbtmc, command: &str) -> Result<String, UsbtmcErrors> {
@@ -52,17 +63,19 @@ pub fn open_device(vid_pid: &str) -> Result<Usbtmc, UsbtmcErrors> {
 
     let endpoint_in = inetrface_alt_settings[0]
         .endpoints()
-        .find(|ep| ep.direction() == Direction::In)
+        .find(|ep| (ep.direction() == Direction::In && ep.transfer_type() == EndpointType::Bulk))
         .expect("failed to find endpoint_in");
 
     let address_in = endpoint_in.address();
+    log!("Endpoint in Address is: 0x{:x}\n", address_in);
 
     let endpoint_out = inetrface_alt_settings[0]
         .endpoints()
-        .find(|ep| ep.direction() == Direction::Out)
+        .find(|ep| ep.direction() == Direction::Out && ep.transfer_type() == EndpointType::Bulk)
         .expect("failed to find endpoint_out");
 
     let address_out = endpoint_out.address();
+    log!("Endpoint out Address is: 0x{:x}\n", address_out);
 
     let endpoint_in_max_packet_size = endpoint_in.max_packet_size();
     let endpoint_out_max_packet_size = endpoint_out.max_packet_size();

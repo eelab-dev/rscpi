@@ -59,9 +59,9 @@ fn little_write_u32(size: u32, len: u8) -> Vec<u8> {
 /*
 * USBTMC document Table 1
 */
-fn pack_bulk_out_header(msgid: u8) -> Vec<u8> {
-    let last_btag: u8 = 0x00;
-    let btag: u8 = (last_btag % 255) + 1;
+fn pack_bulk_out_header(msgid: u8, btag: u8) -> Vec<u8> {
+    //let last_btag: u8 = 0x00;
+    let btag: u8 = (btag % 255) + 1;
     //last_btag = btag;
 
     // BBBx
@@ -71,8 +71,8 @@ fn pack_bulk_out_header(msgid: u8) -> Vec<u8> {
 /*
 * USBTMC document Table 3 and USB488 document Table 3
 */
-fn pack_dev_dep_msg_out_header(transfer_size: usize, eom: bool) -> Vec<u8> {
-    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_OUT);
+fn pack_dev_dep_msg_out_header(transfer_size: usize, eom: bool, btag: u8) -> Vec<u8> {
+    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_OUT, btag);
 
     let mut total_transfer_size: Vec<u8> = little_write_u32(transfer_size as u32, 4);
     let bm_transfer_attributes: u8 = if eom { 0x01 } else { 0x00 };
@@ -90,7 +90,7 @@ fn pack_dev_dep_msg_out_header(transfer_size: usize, eom: bool) -> Vec<u8> {
 * USBTMC document Table 4
 */
 fn pack_dev_dep_msg_in_header(transfer_size: usize, term_char: u8) -> Vec<u8> {
-    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_IN);
+    let mut header = pack_bulk_out_header(USBTMC_MSGID_DEV_DEP_MSG_IN, 0x00);
 
     let mut max_transfer_size: Vec<u8> = little_write_u32(transfer_size as u32, 4);
     let bm_transfer_attributes: u8 = if term_char == 0 { 0x00 } else { 0x02 };
@@ -182,29 +182,49 @@ fn read_data(usbtmc: &mut Usbtmc, big_big_buffer: &mut Vec<u8>) -> Result<bool, 
     Ok(eom)
 }
 
-pub(crate) fn send_command_raw(
-    usbtmc: &mut Usbtmc,
-    command: &str,
-) -> Result<Vec<u8>, UsbtmcErrors> {
-    let interface = &mut usbtmc.interface;
-
-    let command_with_newline = command.to_owned() + "\n";
-    let command_data = command_with_newline.as_bytes();
-
+pub fn write_str(usbtmc: &mut Usbtmc, command_data: &str) -> Result<(), UsbtmcErrors> {
     let offset: usize = 0;
     let num: usize = command_data.len();
 
-    let block = &command_data[offset..(num - offset)];
+    let data = &command_data[offset..(num - offset)];
+    write_binary(usbtmc, data.as_bytes())
+}
 
-    let eom = true;
-    let size: usize = block.len();
+pub fn write_binary(usbtmc: &mut Usbtmc, in_data: &[u8]) -> Result<(), UsbtmcErrors> {
+    let interface = &mut usbtmc.interface;
 
-    let mut req = pack_dev_dep_msg_out_header(size, eom);
-    let mut b: Vec<u8> = block.to_vec();
+    let mut size: usize = in_data.len();
+    let max_data_size: usize = 1024 * usbtmc.endpoint_out_max_packet_size;
+
+    let mut data = in_data;
+
+    let mut btag: u8 = 0x00;
+
+    while size > max_data_size {
+        let send = pack_dev_dep_msg_out_header(max_data_size, false, btag);
+        let mut b: Vec<u8> = data[0..max_data_size].to_vec();
+        let mut req = send;
+        req.append(&mut b);
+        req.append(&mut vec![0x00; (4 - (max_data_size % 4)) % 4]);
+
+        let ok_results: Result<nusb::transfer::ResponseBuffer, TransferError> =
+            block_on(interface.bulk_out(usbtmc.endpoint_out_addr, req)).into_result();
+
+        let ok = ok_results.map_err(|_| UsbtmcErrors::BulkOutTransferError)?;
+
+        log!("ok->: {:?}\n", ok);
+
+        size -= max_data_size;
+
+        data = &data[max_data_size..];
+
+        btag = (btag % 255) + 1;
+    }
+
+    let mut req = pack_dev_dep_msg_out_header(size, true, btag);
+    let mut b: Vec<u8> = data.to_vec();
     req.append(&mut b);
     req.append(&mut vec![0x00; (4 - (size % 4)) % 4]);
-
-    log!("Sending command: {:?}\n", command);
 
     let ok_results: Result<nusb::transfer::ResponseBuffer, TransferError> =
         block_on(interface.bulk_out(usbtmc.endpoint_out_addr, req)).into_result();
@@ -213,7 +233,15 @@ pub(crate) fn send_command_raw(
 
     log!("ok->: {:?}\n", ok);
 
-    let query = is_query(command_data);
+    Ok(())
+}
+
+pub fn send_command_raw_binary(
+    usbtmc: &mut Usbtmc,
+    data: &[u8],
+    query: bool,
+) -> Result<Vec<u8>, UsbtmcErrors> {
+    write_binary(usbtmc, data)?;
 
     let mut big_big_buffer: Vec<u8> = Vec::new();
 
@@ -252,6 +280,19 @@ pub(crate) fn send_command_raw(
     log!("\n");
 
     Ok(big_big_buffer)
+}
+
+pub(crate) fn send_command_raw(
+    usbtmc: &mut Usbtmc,
+    command: &str,
+) -> Result<Vec<u8>, UsbtmcErrors> {
+    let command_with_newline = command.to_owned() + "\n";
+    let command_data = command_with_newline.as_bytes();
+
+    log!("Sending command: {:?}\n", command);
+    let query = is_query(command_data);
+
+    send_command_raw_binary(usbtmc, command_data, query)
 }
 
 pub(crate) fn send_command(usbtmc: &mut Usbtmc, command: &str) -> Result<String, UsbtmcErrors> {
